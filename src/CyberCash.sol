@@ -34,8 +34,8 @@ contract CyberCash is ERC20, ERC20Permit {
     address private immutable MIGRATOR;
 
     uint256 public constant MINT_PER_SECOND = 31709791983764586504; // 1 bn tokens p.a. (365 days)
-    uint256 public constant BURN_ON_TRANSFER = 10; // 1%
-    uint256 public constant BURN_FROM_LP = 5; // 0.5%
+    uint256 public constant BURN_ON_TRANSFER = 5; // 0.5%
+    uint256 public constant BURN_FROM_LP = 2; // 0.2%
     uint256 public constant BURN_PRECISION = 1000;
 
     uint256 public rewardsPerTokenBurned; // scaled up by REWARD_PRECISION

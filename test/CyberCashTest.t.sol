@@ -51,8 +51,8 @@ contract CyberCashTest is Test {
     uint256 constant RESERVE_START = 1e27; // 1 billion
     uint256 constant RESERVE_BUFFER = 1e9; // Token reserve in the LP that cannot be burned
     uint256 constant MINT_PER_SECOND = 31709791983764586504; // 1 bn tokens p.a. (365 days)
-    uint256 constant BURN_ON_TRANSFER = 10; // 1%
-    uint256 constant BURN_FROM_LP = 5; // 0.5%
+    uint256 constant BURN_ON_TRANSFER = 5; // 0.5%
+    uint256 constant BURN_FROM_LP = 2; // 0.2%
     uint256 constant BURN_PRECISION = 1000;
     uint256 constant REWARD_PRECISION = 1e18;
     uint256 constant ONE_TOKEN = 1e18;
@@ -307,7 +307,7 @@ contract CyberCashTest is Test {
 
     // Transfer the burnScore from one user to another & verify new reward accrual
     function testSuccess_TransferBurnScore() public {
-        uint256 amountSend = 1e20;
+        uint256 amountSend = 1e21;
 
         // Step 1: Send tokens to Alice, treasury accrues burnScore
         vm.prank(treasury);
