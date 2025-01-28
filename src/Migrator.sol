@@ -13,6 +13,15 @@ error AlreadySet();
 error InvalidRatio();
 error NoBalanceAvailable();
 
+///@title The Migrator enables migration from a standard ERC20 token to CASH if listed
+///@author Possum Labs
+/**
+ * @notice This contract allows anyone to migrate a listed token to CASH at a specific ratio
+ * The main purpose is to migrate PSM, a standard ERC20 token to CASH
+ * Enabling the migration of other tokens of external communities may be evaluated at some point
+ * If this was the case, the respective tokens will be inspected for non-standard behaviour
+ * This contract is supposed to work only with standard ERC20 tokens
+ */
 contract Migrator {
     constructor(address _owner) {
         owner = _owner;
@@ -29,6 +38,12 @@ contract Migrator {
     mapping(address token => bool canMigrate) private allowedTokens;
     mapping(address token => uint256 cashPerToken) private ratios;
     uint256 private constant RATIO_PRECISION = 1000;
+
+    // ============================================
+    // ==                EVENTS                  ==
+    // ============================================
+    event TokenMigrationAdded(address indexed token, uint256 ratio, bool indexed canMigrate);
+    event TokenMigrated(address indexed user, address indexed token, uint256 amountIn, uint256 cashOut);
 
     // ============================================
     // ==              FUNCTIONS                 ==
@@ -54,6 +69,8 @@ contract Migrator {
 
         allowedTokens[_token] = true;
         ratios[_token] = _cashPer1000Token;
+
+        emit TokenMigrationAdded(_token, _cashPer1000Token, true);
     }
 
     ///@notice Enable users to migrate a listed token to CASH
@@ -71,6 +88,8 @@ contract Migrator {
         // Send the tokens
         IERC20(_token).safeTransferFrom(msg.sender, address(this), spendToken);
         cyberCash.transfer(msg.sender, receivedCash);
+
+        emit TokenMigrated(msg.sender, _token, spendToken, receivedCash);
     }
 
     ///@notice Return if a token can be exchanged for CASH
