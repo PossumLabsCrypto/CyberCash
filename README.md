@@ -1,6 +1,6 @@
 ## CyberCash
 
-**CyberCash is a digital currency that pays rewards for using it.**
+**CyberCash is a digital currency that pays its users.**
 
 CyberCash consists of three mechanisms:
 
@@ -36,5 +36,5 @@ This incentivizes real and sustained usage of the currency.
 The burn score can be transfered between any address.
 However, the transfer must be initiated by the address owning the burn score directly (no transferFrom).
 The intention of the burn score is that it is user owned and not treated as a transferable commodity.
-Enabling a one-sided transfer logic allows users to move their burn score between wallets.
+Enabling a one-sided transfer logic allows users to move their burn score between wallets without accidentally losing control over it via approvals & transferFrom.
 
