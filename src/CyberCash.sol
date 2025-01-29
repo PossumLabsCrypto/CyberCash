@@ -68,6 +68,9 @@ contract CyberCash is ERC20, ERC20Permit {
         // Set the LP address
         liquidityPool = _poolAddress;
 
+        // Reset the starting point of inflation to reduce overestimation of supply
+        lastMintTime = block.timestamp;
+
         // Revoke the owner
         owner = address(0);
     }
