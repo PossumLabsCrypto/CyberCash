@@ -176,7 +176,7 @@ contract CyberCash is ERC20, ERC20Permit {
         address from = _msgSender();
 
         // Only check for burns & rewards after initialisation, otherwise normal ERC20 functionality
-        if (liquidityPool == address(0)) {
+        if (liquidityPool != address(0)) {
             // Execute burns, state updates and mint rewards
             // Skip if sender or receiver is liquidity pool or migrator
             // Enable tax free trading and migration
@@ -200,7 +200,7 @@ contract CyberCash is ERC20, ERC20Permit {
         _spendAllowance(_from, spender, _amount);
 
         // Only check for burns & rewards after initialisation, otherwise normal ERC20 functionality
-        if (liquidityPool == address(0)) {
+        if (liquidityPool != address(0)) {
             // Execute burns, state updates and mint rewards
             // Skip if sender or receiver is liquidity pool or migrator
             // Enable tax free trading and migration
