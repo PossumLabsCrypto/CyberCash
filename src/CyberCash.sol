@@ -14,7 +14,6 @@ error ZeroAmount();
 contract CyberCash is ERC20, ERC20Permit {
     constructor(string memory name, string memory symbol, address _owner) ERC20(name, symbol) ERC20Permit(name) {
         owner = _owner;
-        DEPLOYMENT = block.timestamp;
         lastMintTime = block.timestamp;
         _mint(owner, INITIAL_SUPPLY);
     }
@@ -28,7 +27,6 @@ contract CyberCash is ERC20, ERC20Permit {
     uint256 private constant INITIAL_SUPPLY = 1e28; // 10 billion
     uint256 private constant RESERVE_BUFFER = 1e9; // Token reserve in the LP that cannot be burned
     uint256 private constant REWARD_PRECISION = 1e18;
-    uint256 private immutable DEPLOYMENT;
 
     uint256 public constant MINT_PER_SECOND = 31709791983764586504; // 1 bn tokens p.a. (365 days)
     uint256 public constant BURN_ON_TRANSFER = 5; // 0.5%
