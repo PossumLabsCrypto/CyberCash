@@ -11,6 +11,7 @@ error TokenNotAllowed();
 error IsAllowed();
 error AlreadySet();
 error InvalidRatio();
+error InvalidDecimals();
 error NoBalanceAvailable();
 
 ///@title The Migrator enables migration from a standard ERC20 token to CASH if listed
@@ -36,13 +37,13 @@ contract Migrator {
     IERC20 public cyberCash;
 
     mapping(address token => bool canMigrate) private allowedTokens;
-    mapping(address token => uint256 cashPerToken) private ratios;
-    uint256 private constant RATIO_PRECISION = 1000;
+    mapping(address token => uint256 cashPerToken) private cashPerWholeTokens;
+    mapping(address token => uint256 decimals) private tokenDecimals;
 
     // ============================================
     // ==                EVENTS                  ==
     // ============================================
-    event TokenMigrationAdded(address indexed token, uint256 ratio, bool indexed canMigrate);
+    event TokenMigrationAdded(address indexed token, uint256 cashPerWholeToken, uint256 tokenDecimals);
     event TokenMigrated(address indexed user, address indexed token, uint256 amountIn, uint256 cashOut);
 
     // ============================================
@@ -61,16 +62,18 @@ contract Migrator {
     ///@notice Allow the owner to add new tokens for migration and set the migration ratio
     ///@dev Tokens cannot be delisted
     ///@dev Ratios cannot be changed afterwards
-    function addTokenMigration(address _token, uint256 _cashPer1000Token) external {
+    function addTokenMigration(address _token, uint256 _cashPerWholeToken, uint256 _wholeTokenDecimals) external {
         if (msg.sender != owner) revert NotOwner();
         if (_token == address(0)) revert ZeroAddress();
-        if (_cashPer1000Token == 0) revert InvalidRatio();
+        if (_cashPerWholeToken == 0) revert InvalidRatio();
         if (allowedTokens[_token]) revert IsAllowed();
+        if (_wholeTokenDecimals == 0 || _wholeTokenDecimals > 50) revert InvalidDecimals();
 
         allowedTokens[_token] = true;
-        ratios[_token] = _cashPer1000Token;
+        cashPerWholeTokens[_token] = _cashPerWholeToken; // to get a 1:1 migration ratio, put the token decimalAdjustment (e.g. 1e6 for USDC, 1e18 for most)
+        tokenDecimals[_token] = _wholeTokenDecimals;
 
-        emit TokenMigrationAdded(_token, _cashPer1000Token, true);
+        emit TokenMigrationAdded(_token, _cashPerWholeToken, _wholeTokenDecimals);
     }
 
     ///@notice Enable users to migrate a listed token to CASH
@@ -79,6 +82,7 @@ contract Migrator {
         if (!allowedTokens[_token]) revert TokenNotAllowed();
         if (_amount == 0) revert ZeroAmount();
 
+        // Ensure some CASH is available for migration
         uint256 balanceCASH = cyberCash.balanceOf(address(this));
         if (balanceCASH == 0) revert NoBalanceAvailable();
 
@@ -107,9 +111,10 @@ contract Migrator {
         // Return 0,0 if the token is not listed for migration
         if (allowedTokens[_token]) {
             uint256 balanceCASH = cyberCash.balanceOf(address(this));
-            uint256 ratio = ratios[_token];
+            uint256 ratio = cashPerWholeTokens[_token];
+            uint256 tokenDecimalAdjustment = 10 ** tokenDecimals[_token];
 
-            uint256 requestedCash = (_amountIn * ratio) / RATIO_PRECISION;
+            uint256 requestedCash = (_amountIn * ratio) / tokenDecimalAdjustment;
 
             receivedAmount = (requestedCash < balanceCASH) ? requestedCash : balanceCASH;
             spendAmount = (requestedCash < balanceCASH) ? _amountIn : (_amountIn * balanceCASH) / requestedCash;
