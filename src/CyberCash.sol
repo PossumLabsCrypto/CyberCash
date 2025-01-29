@@ -5,6 +5,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 
 error InsufficientBurnScore();
+error NotInitialized();
 error NotOwner();
 error ProhibitedAddress();
 error ZeroAddress();
@@ -54,17 +55,20 @@ contract CyberCash is ERC20, ERC20Permit {
     // ============================================
     // ==            NEW FUNCTIONS               ==
     // ============================================
-    ///@notice Let the owner set the address of the liquidity pool and revoke owner
-    function setPoolAndMigrator(address _poolAddress, address _migratorAddress) public {
+    ///@notice Set the address of the liquidity pool and migrator. Revoke owner.
+    function initialize(address _poolAddress, address _migratorAddress) public {
         if (msg.sender != owner) revert NotOwner();
         if (_poolAddress == address(0)) revert ZeroAddress();
         if (_migratorAddress == address(0)) revert ZeroAddress();
 
+        // Enable tax free transfers involving the LP and migrator
         exemptedAddresses[_poolAddress] = true;
         exemptedAddresses[_migratorAddress] = true;
 
+        // Set the LP address
         liquidityPool = _poolAddress;
 
+        // Revoke the owner
         owner = address(0);
     }
 
@@ -171,11 +175,14 @@ contract CyberCash is ERC20, ERC20Permit {
     function transfer(address _to, uint256 _amount) public override returns (bool) {
         address from = _msgSender();
 
-        // Execute burns, state updates and mint rewards
-        // Skip if sender or receiver is liquidity pool or migrator
-        // Enable tax free trading and migration
-        if (!exemptedAddresses[from] && !exemptedAddresses[_to]) {
-            _amount = burnsAndRewards(from, _amount);
+        // Only check for burns & rewards after initialisation, otherwise normal ERC20 functionality
+        if (liquidityPool == address(0)) {
+            // Execute burns, state updates and mint rewards
+            // Skip if sender or receiver is liquidity pool or migrator
+            // Enable tax free trading and migration
+            if (!exemptedAddresses[from] && !exemptedAddresses[_to]) {
+                _amount = burnsAndRewards(from, _amount);
+            }
         }
 
         // send the tokens
@@ -192,11 +199,14 @@ contract CyberCash is ERC20, ERC20Permit {
         address spender = _msgSender();
         _spendAllowance(_from, spender, _amount);
 
-        // Execute burns, state updates and mint rewards
-        // Skip if sender or receiver is liquidity pool or migrator
-        // Enable tax free trading and migration
-        if (!exemptedAddresses[_from] && !exemptedAddresses[_to]) {
-            _amount = burnsAndRewards(_from, _amount);
+        // Only check for burns & rewards after initialisation, otherwise normal ERC20 functionality
+        if (liquidityPool == address(0)) {
+            // Execute burns, state updates and mint rewards
+            // Skip if sender or receiver is liquidity pool or migrator
+            // Enable tax free trading and migration
+            if (!exemptedAddresses[_from] && !exemptedAddresses[_to]) {
+                _amount = burnsAndRewards(_from, _amount);
+            }
         }
 
         // send the tokens
