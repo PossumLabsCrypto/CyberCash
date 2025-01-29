@@ -65,7 +65,7 @@ contract Migrator {
         if (msg.sender != owner) revert NotOwner();
         if (_token == address(0)) revert ZeroAddress();
         if (_cashPer1000Token == 0) revert InvalidRatio();
-        if (allowedTokens[_token] == true) revert IsAllowed();
+        if (allowedTokens[_token]) revert IsAllowed();
 
         allowedTokens[_token] = true;
         ratios[_token] = _cashPer1000Token;
