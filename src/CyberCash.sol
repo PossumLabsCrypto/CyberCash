@@ -142,7 +142,7 @@ contract CyberCash is ERC20, ERC20Permit {
 
         // Burn the tokens
         _burn(_sender, burnedFromTx);
-        if (liquidityPool != address(0)) _burn(liquidityPool, burnedFromLP);
+        _burn(liquidityPool, burnedFromLP);
 
         // increase the burn tracker by the tx burn amount (individual and global)
         totalBurned += burnedFromTx;
