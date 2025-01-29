@@ -44,7 +44,7 @@ contract CyberCash is ERC20, ERC20Permit {
     uint256 public lastMintTime;
     uint256 public pendingMints;
 
-    uint256 public totalBurned;
+    uint256 public totalBurned = 1;
     mapping(address user => uint256 burned) public burnScore;
 
     // ============================================
@@ -72,9 +72,7 @@ contract CyberCash is ERC20, ERC20Permit {
     ///@notice Calculate the pending rewards of a user
     function userRewards(address _user) private view returns (uint256 rewards) {
         uint256 addedRewards = totalRewards();
-        uint256 _totalBurned = (totalBurned < REWARD_PRECISION) ? REWARD_PRECISION : totalBurned; // min 1e18 in denominator
-        uint256 simulatedRewardsPerTokenBurned =
-            rewardsPerTokenBurned + (addedRewards * REWARD_PRECISION) / _totalBurned;
+        uint256 simulatedRewardsPerTokenBurned = rewardsPerTokenBurned + (addedRewards * REWARD_PRECISION) / totalBurned;
 
         rewards =
             (burnScore[_user] * (simulatedRewardsPerTokenBurned - userRewardsPerTokenBurned[_user])) / REWARD_PRECISION;
@@ -126,8 +124,7 @@ contract CyberCash is ERC20, ERC20Permit {
 
         // Update the rewards tracker (individual and global)
         uint256 addedRewards = totalRewards();
-        uint256 _totalBurned = (totalBurned < REWARD_PRECISION) ? REWARD_PRECISION : totalBurned; // min 1e18 in denominator
-        rewardsPerTokenBurned += (addedRewards * REWARD_PRECISION) / _totalBurned;
+        rewardsPerTokenBurned += (addedRewards * REWARD_PRECISION) / totalBurned;
         userRewardsPerTokenBurned[_sender] = rewardsPerTokenBurned;
         pendingMints = (pendingMints + addedRewards) - rewards;
 
