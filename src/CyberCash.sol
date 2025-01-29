@@ -6,16 +6,13 @@ import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20P
 
 error InsufficientBurnScore();
 error NotOwner();
+error ProhibitedAddress();
 error ZeroAddress();
 error ZeroAmount();
 
 contract CyberCash is ERC20, ERC20Permit {
-    constructor(string memory name, string memory symbol, address _owner, address _migrator)
-        ERC20(name, symbol)
-        ERC20Permit(name)
-    {
+    constructor(string memory name, string memory symbol, address _owner) ERC20(name, symbol) ERC20Permit(name) {
         owner = _owner;
-        MIGRATOR = _migrator;
         DEPLOYMENT = block.timestamp;
         lastMintTime = block.timestamp;
         _mint(owner, INITIAL_SUPPLY);
@@ -31,12 +28,13 @@ contract CyberCash is ERC20, ERC20Permit {
     uint256 private constant RESERVE_BUFFER = 1e9; // Token reserve in the LP that cannot be burned
     uint256 private constant REWARD_PRECISION = 1e18;
     uint256 private immutable DEPLOYMENT;
-    address private immutable MIGRATOR;
 
     uint256 public constant MINT_PER_SECOND = 31709791983764586504; // 1 bn tokens p.a. (365 days)
     uint256 public constant BURN_ON_TRANSFER = 5; // 0.5%
     uint256 public constant BURN_FROM_LP = 2; // 0.2%
     uint256 public constant BURN_PRECISION = 1000;
+
+    mapping(address specialAddress => bool exempted) private exemptedAddresses;
 
     uint256 public rewardsPerTokenBurned; // scaled up by REWARD_PRECISION
     mapping(address user => uint256 rewards) private userRewardsPerTokenBurned; // scaled up by REWARD_PRECISION
@@ -57,10 +55,16 @@ contract CyberCash is ERC20, ERC20Permit {
     // ==            NEW FUNCTIONS               ==
     // ============================================
     ///@notice Let the owner set the address of the liquidity pool and revoke owner
-    function setPoolAddress(address _poolAddress) public {
+    function setPoolAndMigrator(address _poolAddress, address _migratorAddress) public {
         if (msg.sender != owner) revert NotOwner();
         if (_poolAddress == address(0)) revert ZeroAddress();
+        if (_migratorAddress == address(0)) revert ZeroAddress();
+
+        exemptedAddresses[_poolAddress] = true;
+        exemptedAddresses[_migratorAddress] = true;
+
         liquidityPool = _poolAddress;
+
         owner = address(0);
     }
 
@@ -83,6 +87,7 @@ contract CyberCash is ERC20, ERC20Permit {
         uint256 balance = burnScore[from];
 
         if (_to == address(0)) revert ZeroAddress();
+        if (exemptedAddresses[_to]) revert ProhibitedAddress();
         if (_amount == 0) revert ZeroAmount();
         if (_amount > balance) revert InsufficientBurnScore();
 
@@ -169,7 +174,7 @@ contract CyberCash is ERC20, ERC20Permit {
         // Execute burns, state updates and mint rewards
         // Skip if sender or receiver is liquidity pool or migrator
         // Enable tax free trading and migration
-        if (from != liquidityPool && _to != liquidityPool && from != MIGRATOR && _to != MIGRATOR) {
+        if (!exemptedAddresses[from] && !exemptedAddresses[_to]) {
             _amount = burnsAndRewards(from, _amount);
         }
 
@@ -190,7 +195,7 @@ contract CyberCash is ERC20, ERC20Permit {
         // Execute burns, state updates and mint rewards
         // Skip if sender or receiver is liquidity pool or migrator
         // Enable tax free trading and migration
-        if (_from != liquidityPool && _to != liquidityPool && _from != MIGRATOR && _to != MIGRATOR) {
+        if (!exemptedAddresses[_from] && !exemptedAddresses[_to]) {
             _amount = burnsAndRewards(_from, _amount);
         }
 
