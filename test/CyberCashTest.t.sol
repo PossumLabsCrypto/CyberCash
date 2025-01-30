@@ -129,7 +129,6 @@ contract CyberCashTest is Test {
     // Register the liquidity pool in the token contract
     function testSuccess_initialize() public {
         assertEq(cyberCash.liquidityPool(), address(0));
-        assertEq(cyberCash.liquidityPool(), address(0));
         assertEq(cyberCash.owner(), treasury);
 
         vm.prank(treasury);
@@ -137,10 +136,12 @@ contract CyberCashTest is Test {
 
         assertEq(cyberCash.liquidityPool(), liquidityPool);
         assertEq(cyberCash.owner(), address(0));
+        assertEq(cyberCash.burnScore(liquidityPool), 0);
+        assertEq(cyberCash.burnScore(address(migrator)), 0);
     }
 
     // Revert cases of LP registration
-    function testRevert_registerLiquidityPool() public {
+    function testRevert_initialize() public {
         assertEq(cyberCash.liquidityPool(), address(0));
         assertEq(cyberCash.owner(), treasury);
 
@@ -163,11 +164,9 @@ contract CyberCashTest is Test {
     // Add liquidity without registering the LP
     function testSuccess_AddToLP() public {
         // setup the LP
-        helper_addLiquidity(); // trigger burn, i.e. less arrive
+        helper_addLiquidity(); // does not trigger burn because initialize() wasn't called yet
 
-        assertEq(
-            cyberCash.balanceOf(liquidityPool), (RESERVE_START * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION
-        );
+        assertEq(cyberCash.balanceOf(liquidityPool), RESERVE_START);
     }
 
     ////////// TRANSFER BETWEEN USERS

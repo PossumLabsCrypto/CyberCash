@@ -59,12 +59,6 @@ contract CyberCash is ERC20, ERC20Permit {
         if (_poolAddress == address(0)) revert ZeroAddress();
         if (_migratorAddress == address(0)) revert ZeroAddress();
 
-        // Ensure that LP and migrator have zero burn score & rewards
-        delete burnScore[_poolAddress];
-        delete burnScore[_migratorAddress];
-        delete userRewardsPerTokenBurned[_poolAddress];
-        delete userRewardsPerTokenBurned[_migratorAddress];
-
         // Enable tax free transfers involving the LP and migrator
         exemptedAddresses[_poolAddress] = true;
         exemptedAddresses[_migratorAddress] = true;
