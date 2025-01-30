@@ -13,6 +13,8 @@ error ZeroAmount();
 
 contract CyberCash is ERC20, ERC20Permit {
     constructor(string memory name, string memory symbol, address _owner) ERC20(name, symbol) ERC20Permit(name) {
+        if (_owner == address(0)) revert ZeroAddress();
+
         owner = _owner;
         lastMintTime = block.timestamp;
         _mint(owner, INITIAL_SUPPLY);
@@ -87,6 +89,8 @@ contract CyberCash is ERC20, ERC20Permit {
             (burnScore[_user] * (simulatedRewardsPerTokenBurned - userRewardsPerTokenBurned[_user])) / REWARD_PRECISION;
     }
 
+    ///@notice Allow users to transfer burnScore between addresses except
+    ///@dev Prevent sending burnScore to the LP and migrator (exempted addresses)
     function transferBurnScore(address _to, uint256 _amount) external {
         address from = _msgSender();
         uint256 balance = burnScore[from];

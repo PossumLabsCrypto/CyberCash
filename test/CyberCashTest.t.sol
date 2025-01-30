@@ -44,6 +44,7 @@ contract CyberCashTest is Test {
 
     // Constants
     uint256 constant INITIAL_SUPPLY = 1e28; // 10 billion
+    uint256 constant INITIAL_TOTAL_BURN = 1;
     uint256 constant RESERVE_START = 1e27; // 1 billion
     uint256 constant RESERVE_BUFFER = 1e9; // Token reserve in the LP that cannot be burned
     uint256 constant MINT_PER_SECOND = 31709791983764586504; // 1 bn tokens p.a. (365 days)
@@ -98,22 +99,12 @@ contract CyberCashTest is Test {
         cyberCash.initialize(liquidityPool, address(migrator));
     }
 
-    // Set CyberCash address in migrator
-    function helper_Migrator_setCashAddress() public {
-        vm.prank(treasury);
-        migrator.setCashAddress(address(cyberCash));
-    }
-
-    // List PSM for migration at ratio 1:1
-    function helper_Migrator_addTokenMigration() public {
-        vm.prank(treasury);
-        migrator.addTokenMigration(psm, PSM_RATIO, PSM_DECIMALS);
-    }
-
     //////////////////////////////////////
     /////// TESTS - CyberCash
     //////////////////////////////////////
-    function testSuccess_deployToken() public view {
+    function testSuccess_deployToken() public {
+        cyberCash = new CyberCash("CyberCash", "CASH", treasury);
+
         assertEq(cyberCash.totalSupply(), INITIAL_SUPPLY);
         assertEq(cyberCash.balanceOf(treasury), INITIAL_SUPPLY);
         assertEq(cyberCash.MINT_PER_SECOND(), MINT_PER_SECOND);
@@ -122,7 +113,12 @@ contract CyberCashTest is Test {
         assertEq(cyberCash.BURN_PRECISION(), BURN_PRECISION);
         assertEq(cyberCash.rewardsPerTokenBurned(), 0);
         assertEq(cyberCash.lastMintTime(), block.timestamp);
-        assertEq(cyberCash.totalBurned(), 0);
+        assertEq(cyberCash.totalBurned(), INITIAL_TOTAL_BURN);
+    }
+
+    function testRevert_deployToken() public {
+        vm.expectRevert(ZeroAddress.selector);
+        cyberCash = new CyberCash("CyberCash", "CASH", address(0));
     }
 
     ////////// LP REGISTRATION & PRELOAD
@@ -145,17 +141,17 @@ contract CyberCashTest is Test {
         assertEq(cyberCash.liquidityPool(), address(0));
         assertEq(cyberCash.owner(), treasury);
 
-        // Attempt to register zero address as liquidity pool
+        // Scenario 1: Register zero address as liquidity pool
         vm.prank(treasury);
         vm.expectRevert(ZeroAddress.selector);
         cyberCash.initialize(address(0), address(migrator));
 
-        // Attempt to register zero address as migrator
+        // Scenario 2: Register zero address as migrator
         vm.prank(treasury);
         vm.expectRevert(ZeroAddress.selector);
         cyberCash.initialize(liquidityPool, address(0));
 
-        // Attempt a second registration of the liquidity pool
+        // Scenario 3: Second registration of the liquidity pool
         helper_initialize();
         vm.expectRevert(NotOwner.selector);
         helper_initialize();
@@ -171,25 +167,31 @@ contract CyberCashTest is Test {
 
     ////////// TRANSFER BETWEEN USERS
     // Transfer Tokens before the LP was set
-    function testSuccess_transferBeforeRegisteredLP() public {
-        // Scenario 1: Tx burn & reward minting, no LP burn
-        uint256 totalSent;
+    function testSuccess_transferBeforeInitialized() public {
+        // Scenario 1: no burns, no rewards
+        vm.prank(Alice);
+        cyberCash.approve(treasury, 1e55);
 
-        // transfer tokens
-        vm.prank(treasury);
-        cyberCash.transfer(Alice, ONE_TOKEN);
-        totalSent += ONE_TOKEN;
+        vm.startPrank(treasury);
+        cyberCash.transfer(Alice, ONE_TOKEN); // send to random address
+
+        cyberCash.transferFrom(Alice, Bob, ONE_TOKEN); // send to bob via transferFrom
+
+        cyberCash.transfer(address(migrator), ONE_TOKEN); // send to migrator before initialisation
+        vm.stopPrank();
 
         //balance checks
-        assertEq(cyberCash.balanceOf(treasury), INITIAL_SUPPLY - totalSent);
-        assertEq(cyberCash.balanceOf(Alice), (ONE_TOKEN * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION);
-        assertTrue(cyberCash.totalSupply() >= INITIAL_SUPPLY - ((totalSent * BURN_ON_TRANSFER) / BURN_PRECISION));
+        assertEq(cyberCash.balanceOf(treasury), INITIAL_SUPPLY - ONE_TOKEN - ONE_TOKEN);
+        assertEq(cyberCash.balanceOf(Bob), ONE_TOKEN);
+        assertTrue(cyberCash.totalSupply() >= INITIAL_SUPPLY);
+        assertEq(cyberCash.liquidityPool(), address(0));
     }
 
     // Transfer Tokens after the LP was set
-    function testSuccess_transferAfterRegisteredLP() public {
-        // Scenario 1: LP was registered but not seeded
-        // Tx burn & reward minting, no LP burn
+    function testSuccess_transferAfterInitialized() public {
+        // Scenario 1: LP was registered but not seeded --> Tx burn & reward minting, no LP burn
+        helper_initialize();
+
         uint256 mult = 1e6;
         uint256 amountSend = mult * ONE_TOKEN;
 
@@ -210,9 +212,8 @@ contract CyberCashTest is Test {
         vm.warp(block.timestamp + oneYear);
 
         uint256 mint = MINT_PER_SECOND * oneYear;
-        uint256 _totalBurned = (cyberCash.totalBurned() < REWARD_PRECISION) ? REWARD_PRECISION : cyberCash.totalBurned();
         uint256 simulatedRewardsPerTokenBurned =
-            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / _totalBurned;
+            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / cyberCash.totalBurned();
 
         uint256 treasuryBurned = cyberCash.burnScore(treasury);
         uint256 reward = (treasuryBurned * (simulatedRewardsPerTokenBurned - 0)) / REWARD_PRECISION;
@@ -225,8 +226,6 @@ contract CyberCashTest is Test {
 
         // Scenario 3: LP was registered and seeded
         // Tx burn & reward minting + LP burn
-        // register the LP
-        helper_initialize();
         helper_addLiquidity();
 
         balanceTreasury -= RESERVE_START;
@@ -243,8 +242,9 @@ contract CyberCashTest is Test {
         uint256 lpBurned = (amountSend * BURN_FROM_LP) / BURN_PRECISION;
         treasuryBurned += txBurned;
         balanceLP += RESERVE_START - lpBurned;
+        balanceTreasury -= amountSend;
 
-        assertEq(balanceTreasury - amountSend, cyberCash.balanceOf(treasury)); // verify transfer & burn
+        assertEq(balanceTreasury, cyberCash.balanceOf(treasury)); // verify transfer & burn
         assertEq(amountSend - txBurned, cyberCash.balanceOf(Bob)); // verify tokens received
         assertEq(treasuryBurned, cyberCash.burnScore(treasury)); // verify burn increase
         assertEq(balanceLP, cyberCash.balanceOf(liquidityPool)); // verify LP balance burn
@@ -265,9 +265,25 @@ contract CyberCashTest is Test {
                 >= cyberCash.balanceOf(treasury) + cyberCash.balanceOf(Alice) + cyberCash.balanceOf(Bob)
                     + cyberCash.balanceOf(liquidityPool)
         );
+
+        // Scenario 5: Send tokens to migrator after initialisation (excempted address)
+        vm.prank(treasury);
+        cyberCash.transfer(address(migrator), amountSend);
+
+        reward = (cyberCash.burnScore(treasury) * (cyberCash.rewardsPerTokenBurned() - simulatedRewardsPerTokenBurned))
+            / REWARD_PRECISION;
+
+        treasuryBurned += 0; // no burn because exempted address is targeted
+        balanceLP -= 0; // no burn because exempted address is targeted
+        balanceTreasury += reward - amountSend;
+
+        assertEq(balanceTreasury, cyberCash.balanceOf(treasury)); // verify transfer & burn
+        assertEq(amountSend, cyberCash.balanceOf(address(migrator))); // verify tokens received
+        assertEq(treasuryBurned, cyberCash.burnScore(treasury)); // verify burn increase
+        assertEq(balanceLP, cyberCash.balanceOf(liquidityPool)); // verify LP balance burn
     }
 
-    // Transfer tokens from the LP after it was set
+    // Transfer tokens from the LP (exempted address) after it was set
     function testSuccess_TransferFromLP() public {
         uint256 wethIn = 1e18;
         uint256 cashOut = 1e26;
@@ -311,7 +327,10 @@ contract CyberCashTest is Test {
     function testSuccess_TransferBurnScore() public {
         uint256 amountSend = 1e21;
 
-        // Step 1: Send tokens to Alice, treasury accrues burnScore
+        // initialize, i.e. enable burn
+        helper_initialize();
+
+        // Step 1: Send tokens to Alice, sender accrues burnScore
         vm.prank(treasury);
         cyberCash.transfer(Alice, amountSend);
 
@@ -319,9 +338,8 @@ contract CyberCashTest is Test {
         vm.warp(block.timestamp + oneYear);
 
         uint256 mint = MINT_PER_SECOND * oneYear;
-        uint256 _totalBurned = (cyberCash.totalBurned() < REWARD_PRECISION) ? REWARD_PRECISION : cyberCash.totalBurned();
         uint256 simulatedRewardsPerTokenBurned =
-            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / _totalBurned;
+            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / cyberCash.totalBurned();
 
         uint256 treasuryBurned = cyberCash.burnScore(treasury);
         uint256 reward = (treasuryBurned * (simulatedRewardsPerTokenBurned - 0)) / REWARD_PRECISION;
@@ -345,21 +363,25 @@ contract CyberCashTest is Test {
         vm.warp(block.timestamp + oneYear);
 
         mint = MINT_PER_SECOND * oneYear;
-        _totalBurned = (cyberCash.totalBurned() < REWARD_PRECISION) ? REWARD_PRECISION : cyberCash.totalBurned();
-
-        uint256 sim2RewardsPerTokenBurned = (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / _totalBurned;
+        uint256 sim2RewardsPerTokenBurned =
+            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / cyberCash.totalBurned();
+        uint256 balanceControlBob = (cyberCash.burnScore(Bob) * mint) / cyberCash.totalBurned();
 
         reward = (treasuryBurned * (sim2RewardsPerTokenBurned - simulatedRewardsPerTokenBurned)) / REWARD_PRECISION;
         balanceSum = cyberCash.balanceOf(treasury) + cyberCash.balanceOf(Alice) + cyberCash.balanceOf(Bob);
 
-        assertEq(balanceTreasury, cyberCash.balanceOf(treasury)); // No change
-        assertEq(cyberCash.balanceOf(Bob), mint); // Bob earns ~1Bn
+        assertEq(balanceTreasury, cyberCash.balanceOf(treasury)); // No change because no burnScore
+        assertEq(cyberCash.balanceOf(Bob), balanceControlBob); // Bob earns ~1Bn
         assertTrue(cyberCash.totalSupply() >= balanceSum);
     }
 
     function testRevert_transferBurnScore() public {
-        // Send tokens to Alice, treasury accrues burnScore
         uint256 amountSend = 1e20;
+
+        // initialize -> enable burns
+        helper_initialize();
+
+        // Send tokens to Alice, treasury accrues burnScore
         vm.startPrank(treasury);
         cyberCash.transfer(Alice, amountSend);
 
@@ -375,5 +397,13 @@ contract CyberCashTest is Test {
         uint256 invalidAmount = cyberCash.burnScore(treasury) + 1;
         vm.expectRevert(InsufficientBurnScore.selector);
         cyberCash.transferBurnScore(Bob, invalidAmount);
+
+        //Scenario 4: Try to send to LP or migrator
+        vm.expectRevert(ProhibitedAddress.selector);
+        cyberCash.transferBurnScore(liquidityPool, 1);
+
+        vm.expectRevert(ProhibitedAddress.selector);
+        cyberCash.transferBurnScore(address(migrator), 1);
+        vm.stopPrank();
     }
 }
