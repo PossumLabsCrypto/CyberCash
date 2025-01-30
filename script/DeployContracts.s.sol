@@ -18,7 +18,7 @@ contract DeployContracts is Script {
         vm.store(address(this), bytes32("optimizerRuns"), bytes32(uint256(9999)));
 
         Migrator migrator = new Migrator(treasury);
-        CyberCash cyberCash = new CyberCash("CyberCash", "CASH", treasury, address(migrator));
+        CyberCash cyberCash = new CyberCash("CyberCash", "CASH", treasury);
 
         deployedMigrator = address(migrator);
         deployedCyberCash = address(cyberCash);

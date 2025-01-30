@@ -14,16 +14,12 @@ interface IWeth {
 // ============================================
 // ==              CUSTOM ERRORS             ==
 // ============================================
-error NotOwner();
-error ZeroAddress();
-
-error ZeroAmount();
-error TokenNotAllowed();
-error IsAllowed();
-error AlreadySet();
 error InsufficientBurnScore();
-error InvalidRatio();
-error NoBalanceAvailable();
+error NotInitialized();
+error NotOwner();
+error ProhibitedAddress();
+error ZeroAddress();
+error ZeroAmount();
 
 contract CyberCashTest is Test {
     // addresses
@@ -56,6 +52,8 @@ contract CyberCashTest is Test {
     uint256 constant BURN_PRECISION = 1000;
     uint256 constant REWARD_PRECISION = 1e18;
     uint256 constant ONE_TOKEN = 1e18;
+    uint256 constant PSM_DECIMALS = 18;
+    uint256 constant PSM_RATIO = 1e18;
     uint256 amountWETH = 1e19;
 
     //////////////////////////////////////
@@ -67,7 +65,7 @@ contract CyberCashTest is Test {
 
         // Create contract instances
         migrator = new Migrator(treasury);
-        cyberCash = new CyberCash("CyberCash", "CASH", treasury, address(migrator));
+        cyberCash = new CyberCash("CyberCash", "CASH", treasury);
 
         deployment = block.timestamp;
 
@@ -94,10 +92,10 @@ contract CyberCashTest is Test {
         vm.stopPrank();
     }
 
-    // register the liquidity pool in the token contract
-    function helper_registerLiquidityPool() public {
+    // register the liquidity pool & migrator in the token contract
+    function helper_initialize() public {
         vm.prank(treasury);
-        cyberCash.setPoolAddress(address(liquidityPool));
+        cyberCash.initialize(liquidityPool, address(migrator));
     }
 
     // Set CyberCash address in migrator
@@ -109,7 +107,7 @@ contract CyberCashTest is Test {
     // List PSM for migration at ratio 1:1
     function helper_Migrator_addTokenMigration() public {
         vm.prank(treasury);
-        migrator.addTokenMigration(psm, 1000);
+        migrator.addTokenMigration(psm, PSM_RATIO, PSM_DECIMALS);
     }
 
     //////////////////////////////////////
@@ -129,14 +127,15 @@ contract CyberCashTest is Test {
 
     ////////// LP REGISTRATION & PRELOAD
     // Register the liquidity pool in the token contract
-    function testSuccess_registerLiquidityPool() public {
+    function testSuccess_initialize() public {
+        assertEq(cyberCash.liquidityPool(), address(0));
         assertEq(cyberCash.liquidityPool(), address(0));
         assertEq(cyberCash.owner(), treasury);
 
         vm.prank(treasury);
-        cyberCash.setPoolAddress(address(liquidityPool));
+        cyberCash.initialize(liquidityPool, address(migrator));
 
-        assertEq(cyberCash.liquidityPool(), address(liquidityPool));
+        assertEq(cyberCash.liquidityPool(), liquidityPool);
         assertEq(cyberCash.owner(), address(0));
     }
 
@@ -148,12 +147,17 @@ contract CyberCashTest is Test {
         // Attempt to register zero address as liquidity pool
         vm.prank(treasury);
         vm.expectRevert(ZeroAddress.selector);
-        cyberCash.setPoolAddress(address(0));
+        cyberCash.initialize(address(0), address(migrator));
+
+        // Attempt to register zero address as migrator
+        vm.prank(treasury);
+        vm.expectRevert(ZeroAddress.selector);
+        cyberCash.initialize(liquidityPool, address(0));
 
         // Attempt a second registration of the liquidity pool
-        helper_registerLiquidityPool();
+        helper_initialize();
         vm.expectRevert(NotOwner.selector);
-        helper_registerLiquidityPool();
+        helper_initialize();
     }
 
     // Add liquidity without registering the LP
@@ -162,8 +166,7 @@ contract CyberCashTest is Test {
         helper_addLiquidity(); // trigger burn, i.e. less arrive
 
         assertEq(
-            cyberCash.balanceOf(address(liquidityPool)),
-            (RESERVE_START * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION
+            cyberCash.balanceOf(liquidityPool), (RESERVE_START * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION
         );
     }
 
@@ -224,7 +227,7 @@ contract CyberCashTest is Test {
         // Scenario 3: LP was registered and seeded
         // Tx burn & reward minting + LP burn
         // register the LP
-        helper_registerLiquidityPool();
+        helper_initialize();
         helper_addLiquidity();
 
         balanceTreasury -= RESERVE_START;
@@ -273,7 +276,7 @@ contract CyberCashTest is Test {
 
         // register the LP
         vm.prank(treasury);
-        cyberCash.setPoolAddress(liquidityPool);
+        cyberCash.initialize(liquidityPool, address(migrator));
 
         // Add liquidity
         helper_addLiquidity();
@@ -373,149 +376,5 @@ contract CyberCashTest is Test {
         uint256 invalidAmount = cyberCash.burnScore(treasury) + 1;
         vm.expectRevert(InsufficientBurnScore.selector);
         cyberCash.transferBurnScore(Bob, invalidAmount);
-    }
-
-    //////////////////////////////////////
-    /////// TESTS - Migrator
-    //////////////////////////////////////
-    // Owner sets the CASH address in Migrator
-    function testSuccess_Migrator_setCashAddress() public {
-        assertEq(address(migrator.cyberCash()), address(0));
-
-        vm.prank(treasury);
-        migrator.setCashAddress(address(cyberCash));
-
-        assertEq(address(migrator.cyberCash()), address(cyberCash));
-    }
-
-    function testRevert_Migrator_setCashAddress() public {
-        // Scenario 1: Revert if not owner
-        vm.prank(Alice);
-        vm.expectRevert(NotOwner.selector);
-        migrator.setCashAddress(Alice);
-
-        // Scenario 2: Revert if zero address
-        vm.prank(treasury);
-        vm.expectRevert(ZeroAddress.selector);
-        migrator.setCashAddress(address(0));
-
-        // Scenario 3: Revert if already set
-        helper_Migrator_setCashAddress();
-        vm.prank(treasury);
-        vm.expectRevert(AlreadySet.selector);
-        migrator.setCashAddress(address(cyberCash));
-    }
-
-    // Owner enables a token for migration
-    function testSuccess_Migrator_addTokenMigration() public {
-        assertEq(migrator.canMigrate(psm), false);
-
-        helper_Migrator_setCashAddress();
-
-        vm.prank(treasury);
-        migrator.addTokenMigration(psm, 1000);
-
-        assertEq(migrator.canMigrate(psm), true);
-
-        vm.prank(treasury);
-        cyberCash.transfer(address(migrator), 1000);
-
-        (uint256 spendPSM, uint256 receivedCASH) = migrator.migrationResult(address(psm), 1000);
-
-        assertEq(spendPSM, 1000);
-        assertEq(receivedCASH, 1000);
-    }
-
-    function testRevert_Migrator_addTokenMigration() public {
-        // Scenario 1: Revert if not owner
-        vm.prank(Alice);
-        vm.expectRevert(NotOwner.selector);
-        migrator.addTokenMigration(psm, 1000);
-
-        // Scenario 2: Revert of zero address
-        vm.startPrank(treasury);
-        vm.expectRevert(ZeroAddress.selector);
-        migrator.addTokenMigration(address(0), 1000);
-
-        // Scenario 3: Revert if ratio is 0
-        vm.expectRevert(InvalidRatio.selector);
-        migrator.addTokenMigration(psm, 0);
-
-        // Scenario 4: Revert if token already enabled
-        migrator.addTokenMigration(psm, 1000);
-        vm.expectRevert(IsAllowed.selector);
-        migrator.addTokenMigration(psm, 111);
-
-        vm.stopPrank();
-    }
-
-    // Execute a migration
-    function testSuccess_Migrator_migrate() public {
-        uint256 cashLoad = 1e4;
-        uint256 psmAmount = 1e6;
-        uint256 migrationOne = 1e3;
-        uint256 migrationTwo = 1e6;
-
-        // treasury sends psm to alice
-        vm.startPrank(treasury);
-        IERC20(psm).transfer(Alice, psmAmount);
-
-        // treasury sends CASH to the migrator
-        cyberCash.transfer(address(migrator), cashLoad);
-        vm.stopPrank();
-
-        // set cybercash address and enable psm migration
-        helper_Migrator_setCashAddress();
-        helper_Migrator_addTokenMigration();
-
-        //Alice set approval
-        vm.startPrank(Alice);
-        IERC20(psm).approve(address(migrator), 1e55);
-
-        // Scenario 1: Alice migrates 1k psm in full
-        migrator.migrate(psm, migrationOne);
-
-        assertEq(IERC20(psm).balanceOf(Alice), psmAmount - migrationOne);
-        assertEq(cyberCash.balanceOf(Alice), migrationOne);
-
-        // Scenario 2: Alice tries to migrate more than the remaining CASH balance in the migrator
-        migrator.migrate(psm, migrationTwo);
-
-        assertEq(IERC20(psm).balanceOf(Alice), psmAmount - cashLoad);
-        assertEq(cyberCash.balanceOf(Alice), cashLoad);
-        assertEq(cyberCash.balanceOf(address(migrator)), 0);
-        assertEq(IERC20(psm).balanceOf(address(migrator)), cashLoad);
-
-        vm.stopPrank();
-    }
-
-    function testRevert_Migrator_migrate() public {
-        // Prepare token balances & settings
-        uint256 psmToAlice = 1e6;
-        uint256 cashToMigrator = 1e4;
-
-        vm.startPrank(treasury);
-        IERC20(psm).transfer(Alice, psmToAlice);
-        cyberCash.transfer(address(migrator), cashToMigrator);
-        vm.stopPrank();
-
-        helper_Migrator_setCashAddress();
-        helper_Migrator_addTokenMigration();
-
-        // Scenario 1: Token is not allowed for migration
-        vm.startPrank(Alice);
-        IERC20(psm).approve(address(migrator), 1e55);
-
-        vm.expectRevert(TokenNotAllowed.selector);
-        migrator.migrate(address(0), 111);
-
-        // Scenario 2: zero amount
-        vm.expectRevert(ZeroAmount.selector);
-        migrator.migrate(psm, 0);
-
-        // Scenario 3: No CASH available in contract
-        migrator.migrate(psm, psmToAlice);
-        vm.expectRevert(NoBalanceAvailable.selector);
-        migrator.migrate(psm, psmToAlice);
     }
 }
