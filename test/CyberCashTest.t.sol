@@ -199,14 +199,20 @@ contract CyberCashTest is Test {
         vm.prank(treasury);
         cyberCash.transfer(Alice, amountSend);
 
+        // send tokens to Alice with transferFrom
+        vm.startPrank(treasury);
+        cyberCash.approve(treasury, 1e55);
+        cyberCash.transferFrom(treasury, Alice, amountSend);
+        vm.stopPrank();
+
         // Calculate and verify effects
         uint256 balanceLP = cyberCash.balanceOf(liquidityPool);
         uint256 balanceTreasury = cyberCash.balanceOf(address(treasury));
         uint256 balanceAlice = cyberCash.balanceOf(Alice);
 
         assertEq(balanceLP, 0);
-        assertEq(balanceTreasury, INITIAL_SUPPLY - amountSend);
-        assertEq(balanceAlice, (amountSend * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION);
+        assertEq(balanceTreasury, INITIAL_SUPPLY - 2 * amountSend);
+        assertEq(balanceAlice, (2 * amountSend * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION);
 
         // Scenario 2: wait some time to let rewards accrue, check rewards
         vm.warp(block.timestamp + oneYear);
