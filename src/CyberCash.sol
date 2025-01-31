@@ -105,7 +105,7 @@ contract CyberCash is ERC20, ERC20Permit {
         burnsAndRewards(_to, 0);
 
         // reduce the sender's burn score
-        burnScore[msg.sender] -= _amount;
+        burnScore[from] -= _amount;
 
         // increase the recipient's burn score
         burnScore[_to] += _amount;
