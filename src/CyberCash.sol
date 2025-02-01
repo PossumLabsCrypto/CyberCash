@@ -77,7 +77,7 @@ contract CyberCash is ERC20, ERC20Permit {
 
     ///@notice Calculate the mintable rewards of the system since the last claim (transaction)
     function totalRewards() private view returns (uint256 mintable) {
-        mintable = MINT_PER_SECOND * (block.timestamp - lastMintTime);
+        if (owner == address(0)) mintable = MINT_PER_SECOND * (block.timestamp - lastMintTime);
     }
 
     ///@notice Calculate the pending rewards of a user
@@ -176,7 +176,7 @@ contract CyberCash is ERC20, ERC20Permit {
     /// @notice Overrides the total supply to reflect time-based increase
     ///@dev Return the sum of minted & burned (physical) tokens and potentially minted tokens
     function totalSupply() public view override returns (uint256) {
-        return (super.totalSupply() + pendingMints + (block.timestamp - lastMintTime) * MINT_PER_SECOND);
+        return (super.totalSupply() + pendingMints + totalRewards());
     }
 
     ///@notice Adjusted Transfer function to send tokens
