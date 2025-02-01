@@ -111,12 +111,11 @@ contract CyberCash is ERC20, ERC20Permit {
         burnScore[_to] += _amount;
     }
 
-    ///@notice Reward users for transacting and burn the transfer tax and tokens from the LP
+    ///@notice Burn the transfer tax and tokens from the LP
     ///@dev This function is triggered by all transfer types
-    ///@dev Mint rewards to the user (sender)
     ///@dev Burn some tokens from the transaction and from the liquidity pool
     ///@dev Only called if the sender or receiver is not the liquidity pool
-    ///@dev This avoids inflation accruing to the LP
+    ///@dev This avoids burnScore accruing to the LP
     function burnOnTransfer(address _sender, uint256 _amount) private returns (uint256 sendAmount) {
         // Get the token amount in the liquidity pool, reduced by the reserve buffer
         uint256 pooledAmount = this.balanceOf(liquidityPool);
