@@ -101,8 +101,8 @@ contract CyberCash is ERC20, ERC20Permit {
         if (_amount > balance) revert InsufficientBurnScore();
 
         // Mint the pending tokens of the sender & receiver (update userRewardsPerTokenBurned)
-        burnsAndRewards(from, 0);
-        burnsAndRewards(_to, 0);
+        mintRewards(from);
+        mintRewards(_to);
 
         // reduce the sender's burn score
         burnScore[from] -= _amount;
@@ -117,7 +117,7 @@ contract CyberCash is ERC20, ERC20Permit {
     ///@dev Burn some tokens from the transaction and from the liquidity pool
     ///@dev Only called if the sender or receiver is not the liquidity pool
     ///@dev This avoids inflation accruing to the LP
-    function burnsAndRewards(address _sender, uint256 _amount) private returns (uint256 sendAmount) {
+    function burnOnTransfer(address _sender, uint256 _amount) private returns (uint256 sendAmount) {
         // Get the token amount in the liquidity pool, reduced by the reserve buffer
         uint256 pooledAmount = this.balanceOf(liquidityPool);
         uint256 canBurnFromLP = (pooledAmount > RESERVE_BUFFER) ? pooledAmount - RESERVE_BUFFER : 0;
@@ -132,19 +132,6 @@ contract CyberCash is ERC20, ERC20Permit {
         // Calculate & return the remaining amount of the transaction
         sendAmount = _amount - burnedFromTx;
 
-        // mint claimable rewards to the sender
-        uint256 rewards = userRewards(_sender);
-        _mint(_sender, rewards);
-
-        // Update the rewards tracker (individual and global)
-        uint256 addedRewards = totalRewards();
-        rewardsPerTokenBurned += (addedRewards * REWARD_PRECISION) / totalBurned;
-        userRewardsPerTokenBurned[_sender] = rewardsPerTokenBurned;
-        pendingMints = (pendingMints + addedRewards) - rewards;
-
-        // Update the mint timestamp
-        lastMintTime = block.timestamp;
-
         // Burn the tokens
         _burn(_sender, burnedFromTx);
         _burn(liquidityPool, burnedFromLP);
@@ -153,9 +140,29 @@ contract CyberCash is ERC20, ERC20Permit {
         totalBurned += burnedFromTx;
         burnScore[_sender] += burnedFromTx;
 
-        // emit events
-        emit RewardsClaimed(_sender, rewards);
+        // emit event
         emit BurnedTokensFromLP(burnedFromLP);
+    }
+
+    ///@notice Mint the pending token rewards to the user
+    ///@dev This function is triggered by all transfer types
+    ///@dev Mint rewards to the user and update tracking variables
+    function mintRewards(address _account) public {
+        // mint claimable rewards to the user
+        uint256 rewards = userRewards(_account);
+        _mint(_account, rewards);
+
+        // Update the rewards tracker (individual and global)
+        uint256 addedRewards = totalRewards();
+        rewardsPerTokenBurned += (addedRewards * REWARD_PRECISION) / totalBurned;
+        userRewardsPerTokenBurned[_account] = rewardsPerTokenBurned;
+        pendingMints = (pendingMints + addedRewards) - rewards;
+
+        // Update the mint timestamp
+        lastMintTime = block.timestamp;
+
+        // emit event
+        emit RewardsClaimed(_account, rewards);
     }
 
     // ============================================
@@ -182,11 +189,14 @@ contract CyberCash is ERC20, ERC20Permit {
 
         // Only check for burns & rewards after initialisation, otherwise normal ERC20 functionality
         if (liquidityPool != address(0)) {
+            // mint rewards to sender
+            mintRewards(from);
+
             // Execute burns, state updates and mint rewards
             // Skip if sender or receiver is liquidity pool or migrator
             // Enable tax free trading and migration
             if (!exemptedAddresses[from] && !exemptedAddresses[_to]) {
-                _amount = burnsAndRewards(from, _amount);
+                _amount = burnOnTransfer(from, _amount);
             }
         }
 
@@ -206,11 +216,14 @@ contract CyberCash is ERC20, ERC20Permit {
 
         // Only check for burns & rewards after initialisation, otherwise normal ERC20 functionality
         if (liquidityPool != address(0)) {
+            // mint rewards to sender
+            mintRewards(_from);
+
             // Execute burns, state updates and mint rewards
             // Skip if sender or receiver is liquidity pool or migrator
             // Enable tax free trading and migration
             if (!exemptedAddresses[_from] && !exemptedAddresses[_to]) {
-                _amount = burnsAndRewards(_from, _amount);
+                _amount = burnOnTransfer(_from, _amount);
             }
         }
 

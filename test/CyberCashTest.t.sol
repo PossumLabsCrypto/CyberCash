@@ -287,6 +287,40 @@ contract CyberCashTest is Test {
         assertEq(amountSend, cyberCash.balanceOf(address(migrator))); // verify tokens received
         assertEq(treasuryBurned, cyberCash.burnScore(treasury)); // verify burn increase
         assertEq(balanceLP, cyberCash.balanceOf(liquidityPool)); // verify LP balance burn
+
+        // scenario 6: transfer to LP
+        vm.warp(block.timestamp + oneYear);
+
+        balanceTreasury = cyberCash.balanceOf(treasury);
+
+        vm.prank(treasury);
+        cyberCash.transfer(liquidityPool, balanceTreasury);
+    }
+
+    function testSuccess_isolatedTransferAfterInitialisation() public {
+        helper_initialize();
+        uint256 sendAmount = 1e22; // 10k tokens
+        // uint256 expectedBurn = (sendAmount * 5) / 1000;
+
+        // Send balance to bob to accrue burn score
+        vm.prank(treasury);
+        cyberCash.transfer(liquidityPool, sendAmount);
+
+        //assertEq(cyberCash.burnScore(treasury), expectedBurn);
+
+        // Send full balance from treasury to Bob including pending income
+        uint256 oldBalance = cyberCash.balanceOf(treasury);
+        vm.warp(block.timestamp + oneYear);
+        uint256 balanceTreasury = cyberCash.balanceOf(treasury);
+
+        assertTrue(balanceTreasury == oldBalance);
+
+        vm.prank(treasury);
+        cyberCash.transfer(liquidityPool, balanceTreasury);
+
+        balanceTreasury = cyberCash.balanceOf(treasury);
+
+        assertEq(balanceTreasury, 0);
     }
 
     // Transfer tokens from the LP (exempted address) after it was set
