@@ -18,6 +18,39 @@ contract CyberCash is ERC20, ERC20Permit {
         owner = _owner;
         lastMintTime = block.timestamp;
         _mint(owner, INITIAL_SUPPLY);
+
+        // Set exemptions for DEX router contracts
+        // Uniswap
+        exemptedAddresses[0x4C60051384bd2d3C01bfc845Cf5F4b44bcbE9de5] = true; //  UniversalRouter
+        exemptedAddresses[0xeC8B0F7Ffe3ae75d7FfAb09429e3675bb63503e4] = true; //  UniversalRouterV1_2
+        exemptedAddresses[0x5E325eDA8064b456f4781070C0738d849c824258] = true; //  UniversalRouterV1_2_V2Support
+
+        exemptedAddresses[0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32] = true; //  V4 PoolManager
+        exemptedAddresses[0xd88F38F930b7952f2DB2432Cb002E7abbF3dD869] = true; //  V4 PositionManager
+
+        // Odos
+        exemptedAddresses[0xa669e7A0d4b3e4Fa48af2dE86BD4CD7126Be4e13] = true; // Smart Order Routing
+        exemptedAddresses[0x7432657cDda02226ac2aAc9d8f552Ee9613B064e] = true; // Limit Order Contracts
+
+        // Paraswap
+        exemptedAddresses[0x6A000F20005980200259B80c5102003040001068] = true; // Augustus v6.2
+
+        // Kyberswap
+        exemptedAddresses[0x6131B5fae19EA4f9D964eAc0408E4408b66337b5] = true; // MetaAggregationRouterV2
+        exemptedAddresses[0xcab2FA2eeab7065B45CBcF6E3936dDE2506b4f6C] = true; // DSLOProtocol
+        exemptedAddresses[0x227B0c196eA8db17A665EA6824D972A64202E936] = true; // LimitOrderProtocol
+
+        // 0x
+        exemptedAddresses[0xDef1C0ded9bec7F1a1670819833240f027b25EfF] = true; // ExchangeProxy
+        exemptedAddresses[0xdB6f1920A889355780aF7570773609Bd8Cb1f498] = true; // ExchangeProxy Flash Wallet
+
+        // 1Inch
+        exemptedAddresses[0x1111111254EEB25477B68fb85Ed929f73A960582] = true; // Aggregation Router V5
+
+        // Cow.fi
+        exemptedAddresses[0x9008D19f58AAbD9eD0D60971565AA8510560ab41] = true; // GPv2 Settlement
+
+        // OpenOcean - TBD
     }
 
     // ============================================
