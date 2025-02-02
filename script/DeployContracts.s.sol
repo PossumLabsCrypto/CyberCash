@@ -2,15 +2,16 @@
 pragma solidity =0.8.19;
 
 import {Script, console} from "lib/forge-std/src/Script.sol";
-import {CyberCash} from "src/CyberCash.sol";
 import {Migrator} from "src/Migrator.sol";
+import {CyberCash} from "src/CyberCash.sol";
+import {Incinerator} from "src/Incinerator.sol";
 
 contract DeployContracts is Script {
     function setUp() public {}
 
     address treasury = 0xAb845D09933f52af5642FC87Dd8FBbf553fd7B33;
 
-    function run() public returns (address deployedMigrator, address deployedCyberCash) {
+    function run() public returns (address deployedCyberCash, address deployedMigrator, address deployedIncinerator) {
         vm.startBroadcast();
 
         // Configure optimizer settings
@@ -19,9 +20,11 @@ contract DeployContracts is Script {
 
         Migrator migrator = new Migrator(treasury);
         CyberCash cyberCash = new CyberCash("CyberCash", "CASH", treasury);
+        Incinerator incinerator = new Incinerator(address(cyberCash));
 
         deployedMigrator = address(migrator);
         deployedCyberCash = address(cyberCash);
+        deployedIncinerator = address(incinerator);
 
         vm.stopBroadcast();
     }
