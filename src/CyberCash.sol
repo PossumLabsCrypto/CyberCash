@@ -179,7 +179,7 @@ contract CyberCash is ERC20, ERC20Permit {
     ///@notice Mint the pending token rewards to the user
     ///@dev This function is triggered by all transfer types
     ///@dev Mint rewards to the user and update tracking variables
-    function mintRewards(address _account) public {
+    function mintRewards(address _account) private {
         // mint claimable rewards to the user
         uint256 rewards = userRewards(_account);
         _mint(_account, rewards);
