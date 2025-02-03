@@ -50,7 +50,8 @@ contract CyberCash is ERC20, ERC20Permit {
         // Cow.fi
         exemptedAddresses[0x9008D19f58AAbD9eD0D60971565AA8510560ab41] = true; // GPv2 Settlement
 
-        // OpenOcean - TBD
+        // OpenOcean
+        exemptedAddresses[0x6352a56caadC4F1E25CD6c75970Fa768A3304e64] = true; // Exchange V2
     }
 
     // ============================================
