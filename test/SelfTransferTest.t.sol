@@ -4,7 +4,6 @@ pragma solidity =0.8.19;
 import {Test, console} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {CyberCash} from "src/CyberCash.sol";
-import {Incinerator} from "src/Incinerator.sol";
 import {Migrator} from "src/Migrator.sol";
 
 // ============================================
@@ -14,7 +13,7 @@ error NotInitialized();
 error ZeroAmount();
 error ZeroAddress();
 
-contract CyberCashTest is Test {
+contract SelfTransferTest is Test {
     // addresses
     address payable Alice = payable(0x46340b20830761efd32832A74d7169B29FEB9758);
     address payable Bob = payable(0x490b1E689Ca23be864e55B46bf038e007b528208);
@@ -27,9 +26,6 @@ contract CyberCashTest is Test {
 
     // Migrator instance
     Migrator migrator;
-
-    // Incinerator instance
-    Incinerator incinerator;
 
     // time
     uint256 oneYear = 60 * 60 * 24 * 365;
@@ -47,7 +43,6 @@ contract CyberCashTest is Test {
     uint256 constant ONE_TOKEN = 1e18;
     uint256 constant PSM_DECIMALS = 18;
     uint256 constant PSM_RATIO = 1e18;
-    uint256 amountWETH = 1e19;
 
     //////////////////////////////////////
     /////// SETUP
@@ -59,11 +54,6 @@ contract CyberCashTest is Test {
         // Create contract instances
         migrator = new Migrator(treasury);
         cyberCash = new CyberCash("CyberCash", "CASH", treasury);
-        incinerator = new Incinerator(address(cyberCash));
-
-        vm.deal(Alice, 100 ether);
-        vm.deal(Bob, 100 ether);
-        vm.deal(treasury, 100 ether);
     }
 
     //////////////////////////////////////
@@ -79,64 +69,31 @@ contract CyberCashTest is Test {
     //////////////////////////////////////
     /////// TESTS - CyberCash
     //////////////////////////////////////
-    function testRevert_deploy() public {
-        vm.expectRevert(ZeroAddress.selector);
-        new Incinerator(address(0));
-    }
-
-    function testSuccess_burnLoop() public {
-        // Scenario 1: interact with Incinerator after initialisation
+    function testSuccess_SelfTransferIncreaseBurnScore() public {
+        // Scenario 1: Transfer CASH to self after initialisation to increase burnScore
         helper_initialize();
 
         uint256 mult = 1e6;
         uint256 amountSend = mult * ONE_TOKEN;
 
         uint256 balanceTreasury = cyberCash.balanceOf(treasury);
-        uint256 balanceIncinerator = cyberCash.balanceOf(address(incinerator));
         uint256 burnScoreTreasury = cyberCash.burnScore(treasury);
-        uint256 burnScoreIncinerator = cyberCash.burnScore(address(incinerator));
 
         assertEq(balanceTreasury, INITIAL_SUPPLY);
-        assertEq(balanceIncinerator, 0);
         assertEq(burnScoreTreasury, 0);
-        assertEq(burnScoreIncinerator, 0);
 
         vm.startPrank(treasury);
-        cyberCash.approve(address(incinerator), 1e55);
-        incinerator.burnLoop(amountSend);
-        vm.stopPrank();
+        cyberCash.transfer(treasury, amountSend);
 
-        uint256 burnStepOne = (amountSend * BURN_ON_TRANSFER) / BURN_PRECISION;
-        uint256 burnStepTwo = ((amountSend - burnStepOne) * BURN_ON_TRANSFER) / BURN_PRECISION;
+        uint256 burnedAmount = (amountSend * BURN_ON_TRANSFER) / BURN_PRECISION;
 
         balanceTreasury = cyberCash.balanceOf(treasury);
-        balanceIncinerator = cyberCash.balanceOf(address(incinerator));
         burnScoreTreasury = cyberCash.burnScore(treasury);
-        burnScoreIncinerator = cyberCash.burnScore(address(incinerator));
 
-        assertEq(balanceTreasury, INITIAL_SUPPLY - burnStepOne - burnStepTwo);
-        assertEq(balanceIncinerator, 0);
-        assertEq(burnScoreTreasury, burnStepOne + burnStepTwo);
-        assertEq(burnScoreIncinerator, 0);
-    }
+        assertEq(balanceTreasury, INITIAL_SUPPLY - burnedAmount);
+        assertEq(burnScoreTreasury, burnedAmount);
 
-    function testRevert_burnLoop() public {
-        uint256 amountSend = 1e6 * ONE_TOKEN;
-
-        // Scenario 1: Not Initialized
-        vm.startPrank(treasury);
-        cyberCash.approve(address(incinerator), 1e55);
-        vm.expectRevert(NotInitialized.selector);
-        incinerator.burnLoop(amountSend);
-        vm.stopPrank();
-
-        // Scenario 2: Zero Amount
-        helper_initialize();
-
-        vm.startPrank(treasury);
-        cyberCash.approve(address(incinerator), 1e55);
-        vm.expectRevert(ZeroAmount.selector);
-        incinerator.burnLoop(0);
-        vm.stopPrank();
+        console.log(burnedAmount);
+        console.log(burnScoreTreasury);
     }
 }
