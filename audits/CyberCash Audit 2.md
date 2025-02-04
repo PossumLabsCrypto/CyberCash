@@ -1,7 +1,5 @@
-https://gist.github.com/MarioPoneder/870f6b1f150d402bc73798f98dd95631
-
-
 # Security review report
+**Security Researcher:** (Mario Poneder)https://gist.github.com/MarioPoneder/870f6b1f150d402bc73798f98dd95631
 **Project:** [`PossumLabsCrypto/CyberCash`](https://github.com/PossumLabsCrypto/CyberCash)   
 **Commit:** [0f428ca479d43405b3e63722b88e25293d05e158](https://github.com/PossumLabsCrypto/CyberCash/commit/0f428ca479d43405b3e63722b88e25293d05e158)   
 **Start Date:** 2025-02-01
