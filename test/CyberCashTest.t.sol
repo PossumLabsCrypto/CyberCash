@@ -14,16 +14,12 @@ interface IWeth {
 // ============================================
 // ==              CUSTOM ERRORS             ==
 // ============================================
-error NotOwner();
-error ZeroAddress();
-
-error ZeroAmount();
-error TokenNotAllowed();
-error IsAllowed();
-error AlreadySet();
 error InsufficientBurnScore();
-error InvalidRatio();
-error NoBalanceAvailable();
+error NotInitialized();
+error NotOwner();
+error ProhibitedAddress();
+error ZeroAddress();
+error ZeroAmount();
 
 contract CyberCashTest is Test {
     // addresses
@@ -48,6 +44,7 @@ contract CyberCashTest is Test {
 
     // Constants
     uint256 constant INITIAL_SUPPLY = 1e28; // 10 billion
+    uint256 constant INITIAL_TOTAL_BURN = 1;
     uint256 constant RESERVE_START = 1e27; // 1 billion
     uint256 constant RESERVE_BUFFER = 1e9; // Token reserve in the LP that cannot be burned
     uint256 constant MINT_PER_SECOND = 31709791983764586504; // 1 bn tokens p.a. (365 days)
@@ -56,6 +53,8 @@ contract CyberCashTest is Test {
     uint256 constant BURN_PRECISION = 1000;
     uint256 constant REWARD_PRECISION = 1e18;
     uint256 constant ONE_TOKEN = 1e18;
+    uint256 constant PSM_DECIMALS = 18;
+    uint256 constant PSM_RATIO = 1e18;
     uint256 amountWETH = 1e19;
 
     //////////////////////////////////////
@@ -67,7 +66,7 @@ contract CyberCashTest is Test {
 
         // Create contract instances
         migrator = new Migrator(treasury);
-        cyberCash = new CyberCash("CyberCash", "CASH", treasury, address(migrator));
+        cyberCash = new CyberCash("CyberCash", "CASH", treasury);
 
         deployment = block.timestamp;
 
@@ -94,28 +93,18 @@ contract CyberCashTest is Test {
         vm.stopPrank();
     }
 
-    // register the liquidity pool in the token contract
-    function helper_registerLiquidityPool() public {
+    // register the liquidity pool & migrator in the token contract
+    function helper_initialize() public {
         vm.prank(treasury);
-        cyberCash.setPoolAddress(address(liquidityPool));
-    }
-
-    // Set CyberCash address in migrator
-    function helper_Migrator_setCashAddress() public {
-        vm.prank(treasury);
-        migrator.setCashAddress(address(cyberCash));
-    }
-
-    // List PSM for migration at ratio 1:1
-    function helper_Migrator_addTokenMigration() public {
-        vm.prank(treasury);
-        migrator.addTokenMigration(psm, 1000);
+        cyberCash.initialize(liquidityPool, address(migrator));
     }
 
     //////////////////////////////////////
     /////// TESTS - CyberCash
     //////////////////////////////////////
-    function testSuccess_deployToken() public view {
+    function testSuccess_deployToken() public {
+        cyberCash = new CyberCash("CyberCash", "CASH", treasury);
+
         assertEq(cyberCash.totalSupply(), INITIAL_SUPPLY);
         assertEq(cyberCash.balanceOf(treasury), INITIAL_SUPPLY);
         assertEq(cyberCash.MINT_PER_SECOND(), MINT_PER_SECOND);
@@ -124,70 +113,85 @@ contract CyberCashTest is Test {
         assertEq(cyberCash.BURN_PRECISION(), BURN_PRECISION);
         assertEq(cyberCash.rewardsPerTokenBurned(), 0);
         assertEq(cyberCash.lastMintTime(), block.timestamp);
-        assertEq(cyberCash.totalBurned(), 0);
+        assertEq(cyberCash.totalBurned(), INITIAL_TOTAL_BURN);
+    }
+
+    function testRevert_deployToken() public {
+        vm.expectRevert(ZeroAddress.selector);
+        cyberCash = new CyberCash("CyberCash", "CASH", address(0));
     }
 
     ////////// LP REGISTRATION & PRELOAD
     // Register the liquidity pool in the token contract
-    function testSuccess_registerLiquidityPool() public {
+    function testSuccess_initialize() public {
         assertEq(cyberCash.liquidityPool(), address(0));
         assertEq(cyberCash.owner(), treasury);
 
         vm.prank(treasury);
-        cyberCash.setPoolAddress(address(liquidityPool));
+        cyberCash.initialize(liquidityPool, address(migrator));
 
-        assertEq(cyberCash.liquidityPool(), address(liquidityPool));
+        assertEq(cyberCash.liquidityPool(), liquidityPool);
         assertEq(cyberCash.owner(), address(0));
+        assertEq(cyberCash.burnScore(liquidityPool), 0);
+        assertEq(cyberCash.burnScore(address(migrator)), 0);
     }
 
     // Revert cases of LP registration
-    function testRevert_registerLiquidityPool() public {
+    function testRevert_initialize() public {
         assertEq(cyberCash.liquidityPool(), address(0));
         assertEq(cyberCash.owner(), treasury);
 
-        // Attempt to register zero address as liquidity pool
+        // Scenario 1: Register zero address as liquidity pool
         vm.prank(treasury);
         vm.expectRevert(ZeroAddress.selector);
-        cyberCash.setPoolAddress(address(0));
+        cyberCash.initialize(address(0), address(migrator));
 
-        // Attempt a second registration of the liquidity pool
-        helper_registerLiquidityPool();
+        // Scenario 2: Register zero address as migrator
+        vm.prank(treasury);
+        vm.expectRevert(ZeroAddress.selector);
+        cyberCash.initialize(liquidityPool, address(0));
+
+        // Scenario 3: Second registration of the liquidity pool
+        helper_initialize();
         vm.expectRevert(NotOwner.selector);
-        helper_registerLiquidityPool();
+        helper_initialize();
     }
 
     // Add liquidity without registering the LP
     function testSuccess_AddToLP() public {
         // setup the LP
-        helper_addLiquidity(); // trigger burn, i.e. less arrive
+        helper_addLiquidity(); // does not trigger burn because initialize() wasn't called yet
 
-        assertEq(
-            cyberCash.balanceOf(address(liquidityPool)),
-            (RESERVE_START * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION
-        );
+        assertEq(cyberCash.balanceOf(liquidityPool), RESERVE_START);
     }
 
     ////////// TRANSFER BETWEEN USERS
     // Transfer Tokens before the LP was set
-    function testSuccess_transferBeforeRegisteredLP() public {
-        // Scenario 1: Tx burn & reward minting, no LP burn
-        uint256 totalSent;
+    function testSuccess_transferBeforeInitialized() public {
+        // Scenario 1: no burns, no rewards
+        vm.prank(Alice);
+        cyberCash.approve(treasury, 1e55);
 
-        // transfer tokens
-        vm.prank(treasury);
-        cyberCash.transfer(Alice, ONE_TOKEN);
-        totalSent += ONE_TOKEN;
+        vm.startPrank(treasury);
+        cyberCash.transfer(Alice, ONE_TOKEN); // send to random address
+
+        cyberCash.transferFrom(Alice, Bob, ONE_TOKEN); // send to bob via transferFrom
+
+        cyberCash.transfer(address(migrator), ONE_TOKEN); // send to migrator before initialisation
+        vm.stopPrank();
 
         //balance checks
-        assertEq(cyberCash.balanceOf(treasury), INITIAL_SUPPLY - totalSent);
-        assertEq(cyberCash.balanceOf(Alice), (ONE_TOKEN * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION);
-        assertTrue(cyberCash.totalSupply() >= INITIAL_SUPPLY - ((totalSent * BURN_ON_TRANSFER) / BURN_PRECISION));
+        assertEq(cyberCash.balanceOf(treasury), INITIAL_SUPPLY - ONE_TOKEN - ONE_TOKEN);
+        assertEq(cyberCash.balanceOf(Bob), ONE_TOKEN);
+        assertTrue(cyberCash.totalSupply() >= INITIAL_SUPPLY);
+        assertEq(cyberCash.liquidityPool(), address(0));
     }
 
     // Transfer Tokens after the LP was set
-    function testSuccess_transferAfterRegisteredLP() public {
-        // Scenario 1: LP was registered but not seeded
-        // Tx burn & reward minting, no LP burn
+    function testSuccess_transferAfterInitialized() public {
+        // Scenario 1: LP was registered but not seeded --> Tx burn & reward minting, no LP burn
+        helper_initialize();
+
         uint256 mult = 1e6;
         uint256 amountSend = mult * ONE_TOKEN;
 
@@ -195,22 +199,27 @@ contract CyberCashTest is Test {
         vm.prank(treasury);
         cyberCash.transfer(Alice, amountSend);
 
+        // send tokens to Alice with transferFrom
+        vm.startPrank(treasury);
+        cyberCash.approve(treasury, 1e55);
+        cyberCash.transferFrom(treasury, Alice, amountSend);
+        vm.stopPrank();
+
         // Calculate and verify effects
         uint256 balanceLP = cyberCash.balanceOf(liquidityPool);
         uint256 balanceTreasury = cyberCash.balanceOf(address(treasury));
         uint256 balanceAlice = cyberCash.balanceOf(Alice);
 
         assertEq(balanceLP, 0);
-        assertEq(balanceTreasury, INITIAL_SUPPLY - amountSend);
-        assertEq(balanceAlice, (amountSend * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION);
+        assertEq(balanceTreasury, INITIAL_SUPPLY - 2 * amountSend);
+        assertEq(balanceAlice, (2 * amountSend * (BURN_PRECISION - BURN_ON_TRANSFER)) / BURN_PRECISION);
 
         // Scenario 2: wait some time to let rewards accrue, check rewards
         vm.warp(block.timestamp + oneYear);
 
         uint256 mint = MINT_PER_SECOND * oneYear;
-        uint256 _totalBurned = (cyberCash.totalBurned() < REWARD_PRECISION) ? REWARD_PRECISION : cyberCash.totalBurned();
         uint256 simulatedRewardsPerTokenBurned =
-            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / _totalBurned;
+            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / cyberCash.totalBurned();
 
         uint256 treasuryBurned = cyberCash.burnScore(treasury);
         uint256 reward = (treasuryBurned * (simulatedRewardsPerTokenBurned - 0)) / REWARD_PRECISION;
@@ -223,8 +232,6 @@ contract CyberCashTest is Test {
 
         // Scenario 3: LP was registered and seeded
         // Tx burn & reward minting + LP burn
-        // register the LP
-        helper_registerLiquidityPool();
         helper_addLiquidity();
 
         balanceTreasury -= RESERVE_START;
@@ -241,8 +248,9 @@ contract CyberCashTest is Test {
         uint256 lpBurned = (amountSend * BURN_FROM_LP) / BURN_PRECISION;
         treasuryBurned += txBurned;
         balanceLP += RESERVE_START - lpBurned;
+        balanceTreasury -= amountSend;
 
-        assertEq(balanceTreasury - amountSend, cyberCash.balanceOf(treasury)); // verify transfer & burn
+        assertEq(balanceTreasury, cyberCash.balanceOf(treasury)); // verify transfer & burn
         assertEq(amountSend - txBurned, cyberCash.balanceOf(Bob)); // verify tokens received
         assertEq(treasuryBurned, cyberCash.burnScore(treasury)); // verify burn increase
         assertEq(balanceLP, cyberCash.balanceOf(liquidityPool)); // verify LP balance burn
@@ -263,9 +271,59 @@ contract CyberCashTest is Test {
                 >= cyberCash.balanceOf(treasury) + cyberCash.balanceOf(Alice) + cyberCash.balanceOf(Bob)
                     + cyberCash.balanceOf(liquidityPool)
         );
+
+        // Scenario 5: Send tokens to migrator after initialisation (excempted address)
+        vm.prank(treasury);
+        cyberCash.transfer(address(migrator), amountSend);
+
+        reward = (cyberCash.burnScore(treasury) * (cyberCash.rewardsPerTokenBurned() - simulatedRewardsPerTokenBurned))
+            / REWARD_PRECISION;
+
+        treasuryBurned += 0; // no burn because exempted address is targeted
+        balanceLP -= 0; // no burn because exempted address is targeted
+        balanceTreasury += reward - amountSend;
+
+        assertEq(balanceTreasury, cyberCash.balanceOf(treasury)); // verify transfer & burn
+        assertEq(amountSend, cyberCash.balanceOf(address(migrator))); // verify tokens received
+        assertEq(treasuryBurned, cyberCash.burnScore(treasury)); // verify burn increase
+        assertEq(balanceLP, cyberCash.balanceOf(liquidityPool)); // verify LP balance burn
+
+        // scenario 6: transfer to LP
+        vm.warp(block.timestamp + oneYear);
+
+        balanceTreasury = cyberCash.balanceOf(treasury);
+
+        vm.prank(treasury);
+        cyberCash.transfer(liquidityPool, balanceTreasury);
     }
 
-    // Transfer tokens from the LP after it was set
+    function testSuccess_isolatedTransferAfterInitialisation() public {
+        helper_initialize();
+        uint256 sendAmount = 1e22; // 10k tokens
+        // uint256 expectedBurn = (sendAmount * 5) / 1000;
+
+        // Send balance to bob to accrue burn score
+        vm.prank(treasury);
+        cyberCash.transfer(liquidityPool, sendAmount);
+
+        //assertEq(cyberCash.burnScore(treasury), expectedBurn);
+
+        // Send full balance from treasury to Bob including pending income
+        uint256 oldBalance = cyberCash.balanceOf(treasury);
+        vm.warp(block.timestamp + oneYear);
+        uint256 balanceTreasury = cyberCash.balanceOf(treasury);
+
+        assertTrue(balanceTreasury == oldBalance);
+
+        vm.prank(treasury);
+        cyberCash.transfer(liquidityPool, balanceTreasury);
+
+        balanceTreasury = cyberCash.balanceOf(treasury);
+
+        assertEq(balanceTreasury, 0);
+    }
+
+    // Transfer tokens from the LP (exempted address) after it was set
     function testSuccess_TransferFromLP() public {
         uint256 wethIn = 1e18;
         uint256 cashOut = 1e26;
@@ -273,7 +331,7 @@ contract CyberCashTest is Test {
 
         // register the LP
         vm.prank(treasury);
-        cyberCash.setPoolAddress(liquidityPool);
+        cyberCash.initialize(liquidityPool, address(migrator));
 
         // Add liquidity
         helper_addLiquidity();
@@ -309,7 +367,10 @@ contract CyberCashTest is Test {
     function testSuccess_TransferBurnScore() public {
         uint256 amountSend = 1e21;
 
-        // Step 1: Send tokens to Alice, treasury accrues burnScore
+        // initialize, i.e. enable burn
+        helper_initialize();
+
+        // Step 1: Send tokens to Alice, sender accrues burnScore
         vm.prank(treasury);
         cyberCash.transfer(Alice, amountSend);
 
@@ -317,9 +378,8 @@ contract CyberCashTest is Test {
         vm.warp(block.timestamp + oneYear);
 
         uint256 mint = MINT_PER_SECOND * oneYear;
-        uint256 _totalBurned = (cyberCash.totalBurned() < REWARD_PRECISION) ? REWARD_PRECISION : cyberCash.totalBurned();
         uint256 simulatedRewardsPerTokenBurned =
-            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / _totalBurned;
+            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / cyberCash.totalBurned();
 
         uint256 treasuryBurned = cyberCash.burnScore(treasury);
         uint256 reward = (treasuryBurned * (simulatedRewardsPerTokenBurned - 0)) / REWARD_PRECISION;
@@ -343,21 +403,25 @@ contract CyberCashTest is Test {
         vm.warp(block.timestamp + oneYear);
 
         mint = MINT_PER_SECOND * oneYear;
-        _totalBurned = (cyberCash.totalBurned() < REWARD_PRECISION) ? REWARD_PRECISION : cyberCash.totalBurned();
-
-        uint256 sim2RewardsPerTokenBurned = (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / _totalBurned;
+        uint256 sim2RewardsPerTokenBurned =
+            (cyberCash.rewardsPerTokenBurned() + mint * REWARD_PRECISION) / cyberCash.totalBurned();
+        uint256 balanceControlBob = (cyberCash.burnScore(Bob) * mint) / cyberCash.totalBurned();
 
         reward = (treasuryBurned * (sim2RewardsPerTokenBurned - simulatedRewardsPerTokenBurned)) / REWARD_PRECISION;
         balanceSum = cyberCash.balanceOf(treasury) + cyberCash.balanceOf(Alice) + cyberCash.balanceOf(Bob);
 
-        assertEq(balanceTreasury, cyberCash.balanceOf(treasury)); // No change
-        assertEq(cyberCash.balanceOf(Bob), mint); // Bob earns ~1Bn
+        assertEq(balanceTreasury, cyberCash.balanceOf(treasury)); // No change because no burnScore
+        assertEq(cyberCash.balanceOf(Bob), balanceControlBob); // Bob earns ~1Bn
         assertTrue(cyberCash.totalSupply() >= balanceSum);
     }
 
     function testRevert_transferBurnScore() public {
-        // Send tokens to Alice, treasury accrues burnScore
         uint256 amountSend = 1e20;
+
+        // initialize -> enable burns
+        helper_initialize();
+
+        // Send tokens to Alice, treasury accrues burnScore
         vm.startPrank(treasury);
         cyberCash.transfer(Alice, amountSend);
 
@@ -373,149 +437,13 @@ contract CyberCashTest is Test {
         uint256 invalidAmount = cyberCash.burnScore(treasury) + 1;
         vm.expectRevert(InsufficientBurnScore.selector);
         cyberCash.transferBurnScore(Bob, invalidAmount);
-    }
 
-    //////////////////////////////////////
-    /////// TESTS - Migrator
-    //////////////////////////////////////
-    // Owner sets the CASH address in Migrator
-    function testSuccess_Migrator_setCashAddress() public {
-        assertEq(address(migrator.cyberCash()), address(0));
+        //Scenario 4: Try to send to LP or migrator
+        vm.expectRevert(ProhibitedAddress.selector);
+        cyberCash.transferBurnScore(liquidityPool, 1);
 
-        vm.prank(treasury);
-        migrator.setCashAddress(address(cyberCash));
-
-        assertEq(address(migrator.cyberCash()), address(cyberCash));
-    }
-
-    function testRevert_Migrator_setCashAddress() public {
-        // Scenario 1: Revert if not owner
-        vm.prank(Alice);
-        vm.expectRevert(NotOwner.selector);
-        migrator.setCashAddress(Alice);
-
-        // Scenario 2: Revert if zero address
-        vm.prank(treasury);
-        vm.expectRevert(ZeroAddress.selector);
-        migrator.setCashAddress(address(0));
-
-        // Scenario 3: Revert if already set
-        helper_Migrator_setCashAddress();
-        vm.prank(treasury);
-        vm.expectRevert(AlreadySet.selector);
-        migrator.setCashAddress(address(cyberCash));
-    }
-
-    // Owner enables a token for migration
-    function testSuccess_Migrator_addTokenMigration() public {
-        assertEq(migrator.canMigrate(psm), false);
-
-        helper_Migrator_setCashAddress();
-
-        vm.prank(treasury);
-        migrator.addTokenMigration(psm, 1000);
-
-        assertEq(migrator.canMigrate(psm), true);
-
-        vm.prank(treasury);
-        cyberCash.transfer(address(migrator), 1000);
-
-        (uint256 spendPSM, uint256 receivedCASH) = migrator.migrationResult(address(psm), 1000);
-
-        assertEq(spendPSM, 1000);
-        assertEq(receivedCASH, 1000);
-    }
-
-    function testRevert_Migrator_addTokenMigration() public {
-        // Scenario 1: Revert if not owner
-        vm.prank(Alice);
-        vm.expectRevert(NotOwner.selector);
-        migrator.addTokenMigration(psm, 1000);
-
-        // Scenario 2: Revert of zero address
-        vm.startPrank(treasury);
-        vm.expectRevert(ZeroAddress.selector);
-        migrator.addTokenMigration(address(0), 1000);
-
-        // Scenario 3: Revert if ratio is 0
-        vm.expectRevert(InvalidRatio.selector);
-        migrator.addTokenMigration(psm, 0);
-
-        // Scenario 4: Revert if token already enabled
-        migrator.addTokenMigration(psm, 1000);
-        vm.expectRevert(IsAllowed.selector);
-        migrator.addTokenMigration(psm, 111);
-
+        vm.expectRevert(ProhibitedAddress.selector);
+        cyberCash.transferBurnScore(address(migrator), 1);
         vm.stopPrank();
-    }
-
-    // Execute a migration
-    function testSuccess_Migrator_migrate() public {
-        uint256 cashLoad = 1e4;
-        uint256 psmAmount = 1e6;
-        uint256 migrationOne = 1e3;
-        uint256 migrationTwo = 1e6;
-
-        // treasury sends psm to alice
-        vm.startPrank(treasury);
-        IERC20(psm).transfer(Alice, psmAmount);
-
-        // treasury sends CASH to the migrator
-        cyberCash.transfer(address(migrator), cashLoad);
-        vm.stopPrank();
-
-        // set cybercash address and enable psm migration
-        helper_Migrator_setCashAddress();
-        helper_Migrator_addTokenMigration();
-
-        //Alice set approval
-        vm.startPrank(Alice);
-        IERC20(psm).approve(address(migrator), 1e55);
-
-        // Scenario 1: Alice migrates 1k psm in full
-        migrator.migrate(psm, migrationOne);
-
-        assertEq(IERC20(psm).balanceOf(Alice), psmAmount - migrationOne);
-        assertEq(cyberCash.balanceOf(Alice), migrationOne);
-
-        // Scenario 2: Alice tries to migrate more than the remaining CASH balance in the migrator
-        migrator.migrate(psm, migrationTwo);
-
-        assertEq(IERC20(psm).balanceOf(Alice), psmAmount - cashLoad);
-        assertEq(cyberCash.balanceOf(Alice), cashLoad);
-        assertEq(cyberCash.balanceOf(address(migrator)), 0);
-        assertEq(IERC20(psm).balanceOf(address(migrator)), cashLoad);
-
-        vm.stopPrank();
-    }
-
-    function testRevert_Migrator_migrate() public {
-        // Prepare token balances & settings
-        uint256 psmToAlice = 1e6;
-        uint256 cashToMigrator = 1e4;
-
-        vm.startPrank(treasury);
-        IERC20(psm).transfer(Alice, psmToAlice);
-        cyberCash.transfer(address(migrator), cashToMigrator);
-        vm.stopPrank();
-
-        helper_Migrator_setCashAddress();
-        helper_Migrator_addTokenMigration();
-
-        // Scenario 1: Token is not allowed for migration
-        vm.startPrank(Alice);
-        IERC20(psm).approve(address(migrator), 1e55);
-
-        vm.expectRevert(TokenNotAllowed.selector);
-        migrator.migrate(address(0), 111);
-
-        // Scenario 2: zero amount
-        vm.expectRevert(ZeroAmount.selector);
-        migrator.migrate(psm, 0);
-
-        // Scenario 3: No CASH available in contract
-        migrator.migrate(psm, psmToAlice);
-        vm.expectRevert(NoBalanceAvailable.selector);
-        migrator.migrate(psm, psmToAlice);
     }
 }
