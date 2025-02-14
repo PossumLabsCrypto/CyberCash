@@ -2,9 +2,9 @@
 
 **CyberCash is a digital currency that pays its users.**
 
-*Contract Address (Arbitrum Ome):* 0xB58E5268E2600AaEa989cCAb91f7B3c83Bf3CE9e
+*Contract Address (Arbitrum One):* 0xB58E5268E2600AaEa989cCAb91f7B3c83Bf3CE9e
 
-CyberCash contains three core mechanisms:
+CyberCash is built on three core mechanisms:
 
 -   **Dual burn on transfer**: Every transfer reduces CASH supply and increases its price.
 -   **Fixed inflation**: The supply of CyberCash expands by a fixed amount each second.
