@@ -2,7 +2,7 @@
 
 **CyberCash is a digital currency that pays its users.**
 
-*Contract Address (Arbitrum One):* 0x7938FdfB552000C6A033FE5787F06010cb75F04B
+*Contract Address (Arbitrum One):* 0x3aabD92Fc26CD0c6cc1B0C6dBB438E9164b18a3d
 
 CyberCash is built on three core mechanisms:
 
