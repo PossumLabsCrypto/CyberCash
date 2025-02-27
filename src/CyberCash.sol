@@ -3,7 +3,6 @@ pragma solidity =0.8.19;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 
 error InsufficientBurnScore();
 error NotInitialized();
@@ -12,7 +11,7 @@ error ProhibitedAddress();
 error ZeroAddress();
 error ZeroAmount();
 
-contract CyberCash is ERC20, ERC20Burnable, ERC20Permit {
+contract CyberCash is ERC20, ERC20Permit {
     constructor(string memory name, string memory symbol, address _owner) ERC20(name, symbol) ERC20Permit(name) {
         if (_owner == address(0)) revert ZeroAddress();
 

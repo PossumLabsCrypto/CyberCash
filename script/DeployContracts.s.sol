@@ -15,7 +15,7 @@ contract DeployContracts is Script {
 
         // Configure optimizer settings
         vm.store(address(this), bytes32("optimizer"), bytes32("true"));
-        vm.store(address(this), bytes32("optimizerRuns"), bytes32(uint256(9997)));
+        vm.store(address(this), bytes32("optimizerRuns"), bytes32(uint256(1337)));
 
         Migrator migrator = new Migrator(treasury);
         CyberCash cyberCash = new CyberCash("CyberCash", "CASH", treasury);
@@ -27,4 +27,4 @@ contract DeployContracts is Script {
     }
 }
 
-// forge script script/DeployContracts.s.sol --rpc-url $ARB_MAINNET_URL --private-key $PRIVATE_KEY --broadcast --verify --verifier etherscan --etherscan-api-key $ARBISCAN_API_KEY --optimize --optimizer-runs 9999
+// forge script script/DeployContracts.s.sol --rpc-url $ARB_MAINNET_URL --private-key $PRIVATE_KEY --broadcast --verify --verifier etherscan --etherscan-api-key $ARBISCAN_API_KEY --optimize --optimizer-runs 1337
