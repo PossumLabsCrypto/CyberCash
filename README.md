@@ -2,15 +2,13 @@
 
 **CyberCash is a digital currency that pays its users.**
 
-*Contract Address (Arbitrum One):* 0xB58E5268E2600AaEa989cCAb91f7B3c83Bf3CE9e
+*Contract Address (Arbitrum One):* 0x7938FdfB552000C6A033FE5787F06010cb75F04B
 
 CyberCash is built on three core mechanisms:
 
 -   **Dual burn on transfer**: Every transfer reduces CASH supply and increases its price.
 -   **Fixed inflation**: The supply of CyberCash expands by a fixed amount each second.
 -   **Passive Income**: Users receive their share of the inflation as passive income depending on their activity.
-
-
 
 
 ## Dual burn on transfer
@@ -28,6 +26,7 @@ A fixed amount of new CASH can be minted every second.
 Per year (365 days) a total of 1 billion new CASH is created and distributed.
 The starting supply is 10 billion CASH.
 
+
 ## Universal Passive Income (UPI)
 The newly minted tokens from inflation accrue to CASH users.
 The transaction burn when sending CASH is tracked for every address.
@@ -35,6 +34,7 @@ Users receive their proportional share of the inflation depending on their propo
 This passive income continues in perpetuity.
 If users become inactive, their relative share of the inflation reduces over time because others continue to burn more tokens while transacting.
 This incentivizes real and sustained usage of the currency.
+
 
 ## Transferable burn score
 The burn score can be transfered between any address.

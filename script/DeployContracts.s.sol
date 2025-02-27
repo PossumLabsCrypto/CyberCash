@@ -8,14 +8,14 @@ import {CyberCash} from "src/CyberCash.sol";
 contract DeployContracts is Script {
     function setUp() public {}
 
-    address treasury = 0xAb845D09933f52af5642FC87Dd8FBbf553fd7B33;
+    address treasury = 0xa0BFD02a7a47CBCA7230E03fbf04A196C3E771E3;
 
     function run() public returns (address deployedCyberCash, address deployedMigrator) {
         vm.startBroadcast();
 
         // Configure optimizer settings
         vm.store(address(this), bytes32("optimizer"), bytes32("true"));
-        vm.store(address(this), bytes32("optimizerRuns"), bytes32(uint256(9999)));
+        vm.store(address(this), bytes32("optimizerRuns"), bytes32(uint256(9997)));
 
         Migrator migrator = new Migrator(treasury);
         CyberCash cyberCash = new CyberCash("CyberCash", "CASH", treasury);
